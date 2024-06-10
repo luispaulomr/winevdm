@@ -34,9 +34,75 @@
 #include "resource.h"
 #include "windows.h"
 
+#include <windows.h>
+#include <stdio.h>
+#include <conio.h>
+#include <tchar.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(winevdm);
 
-extern void __wine_load_dos_exe( LPCSTR filename, LPCSTR cmdline );
+extern void __wine_load_dos_exe(LPCSTR filename, LPCSTR cmdline);
+
+/************************************************************
+***************** begin LRIBEIRO changes ********************
+*************************************************************
+*/
+
+struct vm86_opt {
+    char aob_scan[10][100];
+    char find_out_what_accesses[10][100];
+};
+
+TCHAR szName[] = TEXT("Local\\FileMapping");
+
+static struct vm86_opt g_vm86_opts = { 0 };
+
+static int _write_shared_data(void* msg, size_t len_msg)
+{
+    HANDLE hMapFile;
+    LPCTSTR pBuf;
+
+    hMapFile = CreateFileMapping(
+        INVALID_HANDLE_VALUE,    // use paging file
+        NULL,                    // default security
+        PAGE_READWRITE,          // read/write access
+        0,                       // maximum object size (high-order DWORD)
+        len_msg,                       // maximum object size (low-order DWORD)
+        szName);                 // name of mapping object
+
+    if (hMapFile == NULL)
+    {
+        WINE_TRACE("Could not create file mapping object (%d).\n", GetLastError());
+        return 1;
+    }
+    pBuf = (LPTSTR)MapViewOfFile(hMapFile,   // handle to map object
+        FILE_MAP_ALL_ACCESS, // read/write permission
+        0,
+        0,
+        len_msg);
+
+    if (pBuf == NULL)
+    {
+        WINE_TRACE("Could not map view of file (%d).\n", GetLastError());
+
+        CloseHandle(hMapFile);
+
+        return 1;
+    }
+
+    CopyMemory((PVOID)pBuf, msg, len_msg);
+
+    UnmapViewOfFile(pBuf);
+
+    //CloseHandle(hMapFile);
+
+    return 0;
+}
+
+/************************************************************
+******************* end LRIBEIRO changes ********************
+*************************************************************
+*/
 
 /***********************************************************************
  *           build_command_line
@@ -835,7 +901,7 @@ int entry_point( int argc, char *argv[] )
     if (!strcmp( argv[1], "--app-name" ))
     {
         if (!(appname = argv[2])) usage();
-        first_arg = argv + 3;
+        first_arg = argv + 2;
     }
     else
     {
@@ -853,6 +919,54 @@ int entry_point( int argc, char *argv[] )
 
     if (*first_arg) first_arg++;  /* skip program name */
     cmdline = build_command_line( first_arg );
+
+/************************************************************
+***************** begin LRIBEIRO changes ********************
+*************************************************************
+*/
+
+    /* CLI options */
+
+    if (WINE_TRACE_ON(winevdm))
+    {
+        char** _argv = first_arg;
+        //for (int i = 0; _argv[i]; ++i) {
+        //    WINE_TRACE("argv: '%s'\n", _argv[i]);
+        //}
+
+        UINT32 i = 0;
+        UINT32 i_aob_scan = 0;
+        UINT32 i_find_out = 0;
+        while (_argv[i]) {
+            if (strcmp(_argv[i], "--aob-scan") == 0) {
+                strncpy(g_vm86_opts.aob_scan[i_aob_scan], _argv[i + 1], sizeof(g_vm86_opts.aob_scan[i_aob_scan]));
+                i_aob_scan++;
+            }
+            else if (strcmp(_argv[i], "--find-out-what-accesses") == 0) {
+                strncpy(g_vm86_opts.find_out_what_accesses[i_find_out], _argv[i + 1], sizeof((g_vm86_opts.aob_scan[i_aob_scan])));
+                i_find_out++;
+            }
+            i += 2;
+        }
+
+        char** p = g_vm86_opts.aob_scan;
+        while (*p) {
+            WINE_TRACE("aob_scan: '%s'\n", p++);
+        }
+        p = g_vm86_opts.find_out_what_accesses;
+        while (*p) {
+            WINE_TRACE("find_out_what_accesses: '%s'\n", p++);
+        }
+    }
+
+    if (_write_shared_data((void*)&g_vm86_opts, sizeof(g_vm86_opts)) != 0) {
+        WINE_TRACE("error writing to mapped file\n");
+    }
+
+/************************************************************
+***************** end LRIBEIRO changes **********************
+*************************************************************
+*/
 
     if (WINE_TRACE_ON(winevdm))
     {

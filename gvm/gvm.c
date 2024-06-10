@@ -781,35 +781,35 @@ static void trace(vcpu_state *state, uint16 cs, uint32 eip, uint16 ss, uint32 es
     eflags &= ~0x100;
     if (get_seg_selector(get_fs(state)) || get_seg_selector(get_gs(state)))
     {
-        fprintf(stderr,
-            "EAX:%04X,ECX:%04X,EDX:%04X,EBX:%04X,"
-            "ESP:%04X,EBP:%04X,ESI:%04X,EDI:%04X,"
-            "ES:%04X,CS:%04X,SS:%04X,DS:%04X,FS:%04x,GS:%04x,"
-            "IP:%04X,stack:%08X,"
-            "EFLAGS:%08X"
-            "\n",
-            get_eax(state), get_ecx(state), get_edx(state), get_ebx(state),
-            esp, get_ebp(state), get_esi(state), get_edi(state),
-            get_seg_selector(get_es(state)), cs, ss, get_seg_selector(get_ds(state)), get_seg_selector(get_fs(state)), get_seg_selector(get_gs(state)),
-            eip, *(LPDWORD)(get_base_addr(ss) + esp),
-            eflags
-        );
+        //fprintf(stderr,
+        //    "EAX:%04X,ECX:%04X,EDX:%04X,EBX:%04X,"
+        //    "ESP:%04X,EBP:%04X,ESI:%04X,EDI:%04X,"
+        //    "ES:%04X,CS:%04X,SS:%04X,DS:%04X,FS:%04x,GS:%04x,"
+        //    "IP:%04X,stack:%08X,"
+        //    "EFLAGS:%08X"
+        //    "\n",
+        //    get_eax(state), get_ecx(state), get_edx(state), get_ebx(state),
+        //    esp, get_ebp(state), get_esi(state), get_edi(state),
+        //    get_seg_selector(get_es(state)), cs, ss, get_seg_selector(get_ds(state)), get_seg_selector(get_fs(state)), get_seg_selector(get_gs(state)),
+        //    eip, *(LPDWORD)(get_base_addr(ss) + esp),
+        //    eflags
+        //);
     }
     else
     {
-        fprintf(stderr,
-            "EAX:%04X,ECX:%04X,EDX:%04X,EBX:%04X,"
-            "ESP:%04X,EBP:%04X,ESI:%04X,EDI:%04X,"
-            "ES:%04X,CS:%04X,SS:%04X,DS:%04X,"
-            "IP:%04X,stack:%08X,"
-            "EFLAGS:%08X"
-            "\n",
-            get_eax(state), get_ecx(state), get_edx(state), get_ebx(state),
-            esp, get_ebp(state), get_esi(state), get_edi(state),
-            get_seg_selector(get_es(state)), cs, ss, get_seg_selector(get_ds(state)),
-            eip, *(LPDWORD)(get_base_addr(ss) + esp),
-            eflags
-        );
+        //fprintf(stderr,
+        //    "EAX:%04X,ECX:%04X,EDX:%04X,EBX:%04X,"
+        //    "ESP:%04X,EBP:%04X,ESI:%04X,EDI:%04X,"
+        //    "ES:%04X,CS:%04X,SS:%04X,DS:%04X,"
+        //    "IP:%04X,stack:%08X,"
+        //    "EFLAGS:%08X"
+        //    "\n",
+        //    get_eax(state), get_ecx(state), get_edx(state), get_ebx(state),
+        //    esp, get_ebp(state), get_esi(state), get_edi(state),
+        //    get_seg_selector(get_es(state)), cs, ss, get_seg_selector(get_ds(state)),
+        //    eip, *(LPDWORD)(get_base_addr(ss) + esp),
+        //    eflags
+        //);
     }
 }
 BOOL has_x86_exception_err(WORD num)
