@@ -1483,6 +1483,18 @@ __ENDTRY
 		UINT32 prev_opsize;     /* previous opsize */
 	};
 
+	/* findout struct */
+
+	struct _findout {
+		BOOL is_found;			/* found memory accessing string flag */
+		char str[1024];         /* string to search */
+		UINT32 i_line;          /* max index */
+		UINT32 i_max;			/* max numbers of buf lines to print */
+		UINT32 i_print;         /* current print index */
+		char to_print[8192];    /* string to print */
+		char prev_buf[48];      /* previous opcode */
+	};
+
 	/* Registers and its respective string struct */
 
 	struct str_regs {
@@ -1548,6 +1560,8 @@ __ENDTRY
 
 	static UINT32 _get_mem_address(char* buf)
 	{
+		fprintf(stderr, "%s\n", buf);
+
 		char* i_token = my_strchr(buf, '[');
 
 		if (NULL == i_token) {
@@ -1589,8 +1603,10 @@ __ENDTRY
 	}
 
 	static BOOL _scan_memory_for_str(UINT32 mem_addr, const char* str)
-	{	
+	{
+		fprintf(stderr, "_scan_memory_for_str: %s\n", str);
 		for (size_t i = 0; i < strlen(str); ++i) {
+			fprintf(stderr, "%c ", read_byte(mem_addr + i));
 			if (read_byte(mem_addr + i) != str[i]) {
 				return false;
 			}
@@ -1646,31 +1662,85 @@ __ENDTRY
 		_aob->prev_opsize = 0;
 	}
 
-	static UINT32 _to_print_mem_addr(UINT32 mem_addr, char* buf, UINT32 i_print)
+	static void _findout_clear(struct _findout* _findout)
 	{
-		i_print += sprintf(&buf[i_print], "access at 0x%08x\n", mem_addr);
+		_findout->i_print = 0;
+		_findout->prev_buf[0] = 0;
+		_findout->is_found = FALSE;
+		_findout->i_max = 10;
+	}
+
+	static UINT32 _to_print_mem_addr(UINT32 mem_addr, char* buf)
+	{
+		UINT32 ret = 0;
+
+		ret += sprintf(buf, "access at 0x%08x\n", mem_addr);
 
 		for (int i = 0; i < 50; ++i) {
 			UINT8 mem_val = read_byte(mem_addr + i);
-			i_print += sprintf(&buf[i_print], "%02x ", mem_val);
+			ret += sprintf(&buf[ret], "%02x ", mem_val);
 		}
 
-		buf[i_print++] = '\n';
-		buf[i_print] = '\0';
+		buf[ret++] = '\n';
+		buf[ret] = '\0';
 
-		return i_print;
+		return ret;
+	}
+
+	static BOOL _check_findout_what_accesses(struct _findout *_f)
+	{
+		UINT32 mem_addr = _get_mem_address(_f->prev_buf);
+		UINT32* i_print = &_f->i_print;
+
+		if (mem_addr && _scan_memory_for_str(mem_addr, _f->str)) {
+			*i_print += fprintf(stderr, &_f->to_print[*i_print], _f->prev_buf);
+			*i_print += fprintf(stderr, &_f->to_print[*i_print], " <--");
+			fprintf(stderr, "LUL1\n");
+			return TRUE;
+		}
+		return FALSE;
 	}
 
 	static void _findout_what_accesses
 	(
-		const char* str,	/* str to search */
-		char *buf		/* mnemonics buf */
+		struct _findout* _findout,	/* findout struct */
+		const char* str,			/* str to search */
+		char* buf					/* mnemonics buf */
 	)
 	{
-		UINT32 mem_addr = _get_mem_address(buf);
-		if (mem_addr && _scan_memory_for_str(mem_addr, str)) {
-			fprintf(stderr, );
+		UINT32* i_print = &_findout->i_print;
+
+		if (!_findout->i_max) {
+			strncpy(_findout->str, str, sizeof(_findout->str));
+			_findout_clear(_findout);
+			fprintf(stderr, "%s\n", _findout->str);
+			fprintf(stderr, "LUL2\n");
 		}
+
+		if (_findout->is_found) {
+			fprintf(stderr, "LUL3\n");
+			_check_findout_what_accesses(_findout);
+			*i_print += fprintf(stderr, &_findout->to_print[*i_print], _findout->prev_buf);
+			_findout->to_print[*i_print] = '\0';
+			++_findout->i_line;
+
+			if (_findout->i_line >= _findout->i_max) {
+				/* end of findout, print data */
+				fprintf(stderr, _findout->to_print);
+				_findout_clear(_findout);
+			}
+		}
+		else {
+			_findout->is_found = _check_findout_what_accesses(_findout);
+			_findout->to_print[*i_print] = '\0';
+		}
+
+		/*
+		 * Set current parameters to delay the memory reading by 1 frame.
+		 * This avoids some segfaults caused by the LES, LDS logic.
+		 */
+
+		strncpy(_findout->prev_buf, buf, sizeof(_findout->prev_buf));
 	}
 
 	static void _aob_scan
@@ -1707,7 +1777,7 @@ __ENDTRY
 					*i_print += sprintf(&_aob->to_print[*i_print], "%02x ", _aob->prev_oprom[i]);
 				}
 				*i_print += sprintf(&_aob->to_print[*i_print], "\n");
-				*i_print = _to_print_mem_addr(mem_addr, _aob->to_print, *i_print);
+				*i_print += _to_print_mem_addr(mem_addr, &_aob->to_print[*i_print]);
 			}
 
 			/*
@@ -2136,7 +2206,6 @@ __except (EXCEPTION_EXECUTE_HANDLER) {
 
 			int result;
 
-			static struct _aob aob_curr[10] = { 0 };
 #if defined(HAS_I386)
 			if (m_sreg[CS].d) {
 				result = CPU_DISASSEMBLE_CALL(x86_32);
@@ -2150,6 +2219,7 @@ else
 			LPVOID p_shared_data = NULL;
 			static struct vm86_opt* p_vm86_opts = NULL;
 			static struct _aob aob_curr[10] = { 0 };
+			static struct _findout findout_curr[10] = { 0 };
 
 			/* LRIBEIRO here */
 
@@ -2160,11 +2230,11 @@ else
 
 			if (p_vm86_opts) {
 				for (size_t i = 0; strlen(p_vm86_opts->aob_scan[i]); ++i) {
-					_aob_scan(&aob_curr[0], p_vm86_opts->aob_scan[i], oprom, opsize, buffer);
+					_aob_scan(&aob_curr[i], p_vm86_opts->aob_scan[i], oprom, opsize, buffer);
 				}
 
 				for (size_t i = 0; strlen(p_vm86_opts->find_out_what_accesses[i]); ++i) {
-					_findout_what_accesses(p_vm86_opts->find_out_what_accesses[i]);
+					_findout_what_accesses(&findout_curr[i], p_vm86_opts->find_out_what_accesses[i], buffer);
 				}
 			}
 
