@@ -1498,59 +1498,79 @@ __ENDTRY
 	/* Registers and its respective string struct */
 
 	struct str_regs {
-		char str[3];            /* reg string */
-		UINT32 reg;             /* reg value */
+		const char str[3];      /* reg string */
+		UINT32 i;				/* reg index */
 	};
 
-	struct str_regs g_str_to_reg[] = {
-		{"ax", REG32(EAX)},
-		{"bx", REG32(EBX)},
-		{"cx", REG32(ECX)},
-		{"dx", REG32(EDX)},
-		{"sp", REG32(ESP)},
-		{"bp", REG32(EBP)},
-		{"si", REG32(ESI)},
-		{"di", REG32(EDI)},
-		{"es", SREG_BASE(ES)},
-		{"cs", SREG_BASE(CS)},
-		{"ss", SREG_BASE(SS)},
-		{"ds", SREG_BASE(DS)},
-		{"fs", SREG_BASE(FS)},
-		{"gs", SREG_BASE(GS)}
+	static struct str_regs g_regs[] = {
+		{"ax", EAX},
+		{"bx", EBX},
+		{"cx", ECX},
+		{"dx", EDX},
+		{"sp", ESP},
+		{"bp", EBP},
+		{"si", ESI},
+		{"di", EDI}
 	};
 
-	struct str_regs g_str_to_default_sreg[] = {
-		{"ax", SREG_BASE(DS)},
-		{"bx", SREG_BASE(DS)},
-		{"cx", SREG_BASE(DS)},
-		{"dx", SREG_BASE(DS)},
-		{"sp", SREG_BASE(SS)},
-		{"bp", SREG_BASE(SS)},
-		{"si", SREG_BASE(DS)},
-		{"di", SREG_BASE(DS)}
+	static struct str_regs g_segs[] = {
+		{"es", ES},
+		{"cs", CS},
+		{"ss", SS},
+		{"ds", DS},
+		{"fs", FS},
+		{"gs", GS}
 	};
 
-	static UINT32 _get_reg_from_str(struct str_regs* p, UINT32 len, char *str)
+	static struct str_regs g_reg_segs[] = {
+		{"ax", DS},
+		{"bx", DS},
+		{"cx", DS},
+		{"dx", DS},
+		{"sp", SS},
+		{"bp", SS},
+		{"si", DS},
+		{"di", DS}
+	};
+
+	static UINT32 _get_index_from_str(struct str_regs* p, UINT32 len, const char *str)
 	{
-		for (int i = 0; i < len; ++i) {
+		for (size_t i = 0; i < len; ++i) {
 			if (strncmp(str, p[i].str, 2) == 0) {
-				return p[i].reg;
+				return p[i].i;
 			}
 		}
-		return 0;
+		return 255;
 	}
 
-	static UINT32 _get_register_from_str(char* str)
+	static UINT32 _get_register_from_str(const char* str)
 	{
-		return _get_reg_from_str(g_str_to_reg, LEN(g_str_to_reg), str);
+		UINT32 i = _get_index_from_str(g_regs, LEN(g_regs), str);
+		if (i == 255) {
+			return 0;
+		}
+		return REG32(i);
 	}
 
-	static UINT32 _get_default_sreg(char* str)
+	static UINT32 _get_segment_from_str(const char* str)
 	{
-		return _get_reg_from_str(g_str_to_default_sreg, LEN(g_str_to_default_sreg), str);
+		UINT32 i = _get_index_from_str(g_segs, LEN(g_segs), str);
+		if (i == 255) {
+			return 0;
+		}
+		return SREG_BASE(i);
 	}
 
-	static UINT32 _get_mnemonic_sreg(char* str)
+	static UINT32 _get_default_segment_from_str(const char* str)
+	{
+		UINT32 i = _get_index_from_str(g_reg_segs, LEN(g_reg_segs), str);
+		if (i == 255) {
+			return 0;
+		}
+		return SREG_BASE(i);
+	}
+
+	static UINT32 _get_mnemonic_sreg(const char* str)
 	{
 		if (strncmp(str, "les", 3) == 0) {
 			return SREG_BASE(ES);
@@ -1558,7 +1578,7 @@ __ENDTRY
 		return 0;
 	}
 
-	static UINT32 _get_mem_address(char* buf)
+	static UINT32 _get_mem_address(const char* buf)
 	{
 		fprintf(stderr, "%s\n", buf);
 
@@ -1571,7 +1591,7 @@ __ENDTRY
 		UINT32 reg = _get_register_from_str(i_token + 1);
 
 		/* this could be modified to support address accesses like: [1440h] */
-		if (0 == reg) {
+		if (!reg) {
 			/* TODO */
 			reg += strtol(i_token + 1, NULL, 16);
 			return 0;
@@ -1588,14 +1608,15 @@ __ENDTRY
 
 		if (!sreg) {
 			if (':' == *(i_token - 1)) {
-				sreg = _get_register_from_str(i_token - 3);
+				sreg = _get_segment_from_str(i_token - 3);
 			}
 			else {
-				sreg = _get_default_sreg(i_token + 1);
+				sreg = _get_default_segment_from_str(i_token + 1);
 			}
 		}
 		else {
 			UINT32 mem_addr = reg + sreg;
+			fprintf(stderr, "mem_addr = %x\n", mem_addr);
 			return read_word(mem_addr) + sreg;
 		}
 
@@ -1604,7 +1625,6 @@ __ENDTRY
 
 	static BOOL _scan_memory_for_str(UINT32 mem_addr, const char* str)
 	{
-		fprintf(stderr, "_scan_memory_for_str: %s\n", str);
 		for (size_t i = 0; i < strlen(str); ++i) {
 			fprintf(stderr, "%c ", read_byte(mem_addr + i));
 			if (read_byte(mem_addr + i) != str[i]) {
