@@ -1533,6 +1533,13 @@ __ENDTRY
 		{"di", DS}
 	};
 
+	struct regs {
+		UINT32 regs[8];
+		UINT32 sregs[6];
+	};
+
+	static struct regs g_prev_regs = { 0 };
+
 	static UINT32 _get_index_from_str(struct str_regs* p, UINT32 len, const char *str)
 	{
 		for (size_t i = 0; i < len; ++i) {
@@ -1549,7 +1556,7 @@ __ENDTRY
 		if (i == 255) {
 			return 0;
 		}
-		return REG32(i);
+		return g_prev_regs.regs[i];
 	}
 
 	static UINT32 _get_segment_from_str(const char* str)
@@ -1558,7 +1565,7 @@ __ENDTRY
 		if (i == 255) {
 			return 0;
 		}
-		return SREG_BASE(i);
+		return g_prev_regs.sregs[i];
 	}
 
 	static UINT32 _get_default_segment_from_str(const char* str)
@@ -1567,7 +1574,7 @@ __ENDTRY
 		if (i == 255) {
 			return 0;
 		}
-		return SREG_BASE(i);
+		return g_prev_regs.sregs[i];
 	}
 
 	static UINT32 _get_mnemonic_sreg(const char* str)
@@ -1580,13 +1587,21 @@ __ENDTRY
 
 	static UINT32 _get_mem_address(const char* buf)
 	{
-		fprintf(stderr, "%s\n", buf);
-
 		char* i_token = my_strchr(buf, '[');
+
+		//fprintf(stderr, "SREG_BASE(ES): %x\n", SREG_BASE(ES));
+		//fprintf(stderr, "SREG(ES): %x\n", SREG(ES));
+		//fprintf(stderr, "CS: %x\n", SREG_BASE(CS));
+		//fprintf(stderr, "SS: %x\n", SREG_BASE(SS));
+		//fprintf(stderr, "DS: %x\n", SREG_BASE(DS));
+		//fprintf(stderr, "FS: %x\n", SREG_BASE(FS));
+		//fprintf(stderr, "GS: %x\n", SREG_BASE(GS));
 
 		if (NULL == i_token) {
 			return 0;
 		}
+
+		//fprintf(stderr, "%s\n", buf);
 
 		UINT32 reg = _get_register_from_str(i_token + 1);
 
@@ -1604,29 +1619,25 @@ __ENDTRY
 
 		/* check for segment register */
 
-		sreg = _get_mnemonic_sreg(buf);
-
-		if (!sreg) {
-			if (':' == *(i_token - 1)) {
-				sreg = _get_segment_from_str(i_token - 3);
-			}
-			else {
-				sreg = _get_default_segment_from_str(i_token + 1);
-			}
+		if (':' == *(i_token - 1)) {
+			sreg = _get_segment_from_str(i_token - 3);
 		}
 		else {
-			UINT32 mem_addr = reg + sreg;
-			fprintf(stderr, "mem_addr = %x\n", mem_addr);
-			return read_word(mem_addr) + sreg;
+			sreg = _get_default_segment_from_str(i_token + 1);
 		}
 
-		return reg + sreg;
+		UINT32 mem_addr = reg + sreg;
+
+		if (strncmp(buf, "les", 3) == 0) {
+			return read_word(mem_addr) + SREG_BASE(ES);
+		}
+
+		return mem_addr;
 	}
 
 	static BOOL _scan_memory_for_str(UINT32 mem_addr, const char* str)
 	{
 		for (size_t i = 0; i < strlen(str); ++i) {
-			fprintf(stderr, "%c ", read_byte(mem_addr + i));
 			if (read_byte(mem_addr + i) != str[i]) {
 				return false;
 			}
@@ -1707,18 +1718,10 @@ __ENDTRY
 		return ret;
 	}
 
-	static BOOL _check_findout_what_accesses(struct _findout *_f)
+	static BOOL _check_findout_what_accesses(const char *buf, const char *str)
 	{
-		UINT32 mem_addr = _get_mem_address(_f->prev_buf);
-		UINT32* i_print = &_f->i_print;
-
-		if (mem_addr && _scan_memory_for_str(mem_addr, _f->str)) {
-			*i_print += fprintf(stderr, &_f->to_print[*i_print], _f->prev_buf);
-			*i_print += fprintf(stderr, &_f->to_print[*i_print], " <--");
-			fprintf(stderr, "LUL1\n");
-			return TRUE;
-		}
-		return FALSE;
+		UINT32 mem_addr = _get_mem_address(buf);
+		return (mem_addr && _scan_memory_for_str(mem_addr, str));
 	}
 
 	static void _findout_what_accesses
@@ -1728,31 +1731,67 @@ __ENDTRY
 		char* buf					/* mnemonics buf */
 	)
 	{
-		UINT32* i_print = &_findout->i_print;
+		//fprintf(stderr, "-> EAX: %x\n", REG32(EAX));
+		//fprintf(stderr, "-> EBX: %x\n", REG32(EBX));
+		//fprintf(stderr, "-> ECX: %x\n", REG32(ECX));
+		//fprintf(stderr, "-> EDX: %x\n", REG32(EDX));
+		//fprintf(stderr, "-> EBP: %x\n", REG32(EBP));
+		//fprintf(stderr, "-> ESI: %x\n", REG32(ESI));
+		//fprintf(stderr, "-> EDI: %x\n", REG32(EDI));
+		//fprintf(stderr, "-> ES: %x\n", SREG_BASE(ES));
+		//fprintf(stderr, "-> sES: %x\n", SREG(ES));
+
+		//if (g_prev_regs.EAX != REG32(EAX)) { fprintf(stderr, "EAX modified from %x to %x\n", g_prev_regs.EAX, REG32(EAX)); }
+		//if (g_prev_regs.EBX != REG32(EBX)) { fprintf(stderr, "EBX modified from %x to %x\n", g_prev_regs.EBX, REG32(EBX)); }
+		//if (g_prev_regs.ECX != REG32(ECX)) { fprintf(stderr, "ECX modified from %x to %x\n", g_prev_regs.ECX, REG32(ECX)); }
+		//if (g_prev_regs.EDX != REG32(EDX)) { fprintf(stderr, "EDX modified from %x to %x\n", g_prev_regs.EDX, REG32(EDX)); }
+		//if (g_prev_regs.ESI != REG32(ESI)) { fprintf(stderr, "ESI modified from %x to %x\n", g_prev_regs.ESI, REG32(ESI)); }
+		//if (g_prev_regs.EDI != REG32(EDI)) { fprintf(stderr, "EDI modified from %x to %x\n", g_prev_regs.EDI, REG32(EDI)); }
+		//if (g_prev_regs.EBP != REG32(EBP)) { fprintf(stderr, "EBP modified from %x to %x\n", g_prev_regs.EBP, REG32(EBP)); }
+		//if (g_prev_regs.CS != SREG_BASE(CS)) { fprintf(stderr, "CS modified from %x to %x\n", g_prev_regs.CS, SREG_BASE(CS)); }
+		//if (g_prev_regs.DS != SREG_BASE(DS)) { fprintf(stderr, "DS modified from %x to %x\n", g_prev_regs.DS, SREG_BASE(DS)); }
+		//if (g_prev_regs.SS != SREG_BASE(SS)) { fprintf(stderr, "SS modified from %x to %x\n", g_prev_regs.SS, SREG_BASE(SS)); }
+		//if (g_prev_regs.ES_base != SREG_BASE(ES)) { fprintf(stderr, "ES modified from %x to %x\n", g_prev_regs.ES_base, SREG_BASE(ES)); }
+		//if (g_prev_regs.ES_selector != SREG(ES)) { fprintf(stderr, "sES modified from %x to %x\n", g_prev_regs.ES_selector, SREG(ES)); }
+
+		//fprintf(stderr, "\nBUF: %s\n\n", buf);
 
 		if (!_findout->i_max) {
 			strncpy(_findout->str, str, sizeof(_findout->str));
 			_findout_clear(_findout);
-			fprintf(stderr, "%s\n", _findout->str);
-			fprintf(stderr, "LUL2\n");
+			//fprintf(stderr, "%s\n", _findout->str);
+			//fprintf(stderr, "LUL2\n");
 		}
 
+		UINT32* i_print = &_findout->i_print;
+
 		if (_findout->is_found) {
-			fprintf(stderr, "LUL3\n");
-			_check_findout_what_accesses(_findout);
-			*i_print += fprintf(stderr, &_findout->to_print[*i_print], _findout->prev_buf);
-			_findout->to_print[*i_print] = '\0';
+			//fprintf(stderr, "LUL3\n");
+			*i_print += sprintf(&_findout->to_print[*i_print], _findout->prev_buf);
+			if (_check_findout_what_accesses(_findout->prev_buf, _findout->str)) {
+				*i_print += sprintf(&_findout->to_print[*i_print], " <--\n");
+			}
+			sprintf(&_findout->to_print[*i_print], "\n");
+
+			fprintf(stderr, "i_line: %d\n", _findout->i_line);
+			fprintf(stderr, "i_print: %d\n", _findout->i_print);
+			fprintf(stderr, "i_max: %d\n", _findout->i_max);
+
 			++_findout->i_line;
 
 			if (_findout->i_line >= _findout->i_max) {
 				/* end of findout, print data */
+				_findout->to_print[*i_print] = '\0';
 				fprintf(stderr, _findout->to_print);
 				_findout_clear(_findout);
 			}
 		}
 		else {
-			_findout->is_found = _check_findout_what_accesses(_findout);
-			_findout->to_print[*i_print] = '\0';
+			_findout->is_found = _check_findout_what_accesses(_findout->prev_buf, _findout->str);
+			if (_findout->is_found) {
+				*i_print += sprintf(&_findout->to_print[*i_print], _findout->prev_buf);
+				*i_print += sprintf(&_findout->to_print[*i_print], " <--\n");
+			}
 		}
 
 		/*
@@ -2256,6 +2295,17 @@ else
 				for (size_t i = 0; strlen(p_vm86_opts->find_out_what_accesses[i]); ++i) {
 					_findout_what_accesses(&findout_curr[i], p_vm86_opts->find_out_what_accesses[i], buffer);
 				}
+			}
+
+			/* there is a special case when ES is used as the base register,
+			 * for example, les ax, es:[bp + 6h]. In our approach of delaying
+			 * the instruction by 1 frame, we need to take the previous ES value too.
+			 */
+			for (size_t i = 0; i < LEN(g_prev_regs.regs); ++i) {
+				g_prev_regs.regs[i] = REG32(i);
+			}
+			for (size_t i = 0; i < LEN(g_prev_regs.sregs); ++i) {
+				g_prev_regs.sregs[i] = SREG_BASE(i);
 			}
 
 #ifdef DUMP_INSTRMEM

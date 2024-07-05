@@ -949,14 +949,14 @@ int entry_point( int argc, char *argv[] )
             i += 2;
         }
 
-        char** p = g_vm86_opts.aob_scan;
-        while (*p) {
-            WINE_TRACE("aob_scan: '%s'\n", p++);
-        }
-        p = g_vm86_opts.find_out_what_accesses;
-        while (*p) {
-            WINE_TRACE("find_out_what_accesses: '%s'\n", p++);
-        }
+        //char** p = g_vm86_opts.aob_scan;
+        //while (*p) {
+        //    WINE_TRACE("aob_scan: '%s'\n", p++);
+        //}
+        //p = g_vm86_opts.find_out_what_accesses;
+        //while (*p) {
+        //    WINE_TRACE("find_out_what_accesses: '%s'\n", p++);
+        //}
     }
 
     if (_write_shared_data((void*)&g_vm86_opts, sizeof(g_vm86_opts)) != 0) {
