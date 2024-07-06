@@ -1486,13 +1486,14 @@ __ENDTRY
 	/* findout struct */
 
 	struct _findout {
-		BOOL is_found;			/* found memory accessing string flag */
 		char str[1024];         /* string to search */
 		UINT32 i_line;          /* max index */
 		UINT32 i_max;			/* max numbers of buf lines to print */
 		UINT32 i_print;         /* current print index */
 		char to_print[8192];    /* string to print */
 		char prev_buf[48];      /* previous opcode */
+		UINT8 prev_oprom[48];   /* previous oprom */
+		UINT32 prev_opsize;     /* previous opsize */
 	};
 
 	/* Registers and its respective string struct */
@@ -1697,8 +1698,10 @@ __ENDTRY
 	{
 		_findout->i_print = 0;
 		_findout->prev_buf[0] = 0;
-		_findout->is_found = FALSE;
 		_findout->i_max = 10;
+		_findout->i_line = 0;
+		_findout->prev_oprom[0] = 0;
+		_findout->prev_opsize = 0;
 	}
 
 	static UINT32 _to_print_mem_addr(UINT32 mem_addr, char* buf)
@@ -1728,6 +1731,8 @@ __ENDTRY
 	(
 		struct _findout* _findout,	/* findout struct */
 		const char* str,			/* str to search */
+		UINT8* oprom,			/* hex opcodes buf */
+		int opsize,				/* buf size */
 		char* buf					/* mnemonics buf */
 	)
 	{
@@ -1765,17 +1770,17 @@ __ENDTRY
 
 		UINT32* i_print = &_findout->i_print;
 
-		if (_findout->is_found) {
+		if (_findout->i_line) {
 			//fprintf(stderr, "LUL3\n");
+			for (size_t i = 0; i < _findout->prev_opsize; i++) {
+				*i_print += sprintf(&_findout->to_print[*i_print], "%02x ", _findout->prev_oprom[i]);
+			}
+
 			*i_print += sprintf(&_findout->to_print[*i_print], _findout->prev_buf);
 			if (_check_findout_what_accesses(_findout->prev_buf, _findout->str)) {
 				*i_print += sprintf(&_findout->to_print[*i_print], " <--\n");
 			}
-			sprintf(&_findout->to_print[*i_print], "\n");
-
-			fprintf(stderr, "i_line: %d\n", _findout->i_line);
-			fprintf(stderr, "i_print: %d\n", _findout->i_print);
-			fprintf(stderr, "i_max: %d\n", _findout->i_max);
+			*i_print += sprintf(&_findout->to_print[*i_print], "\n");
 
 			++_findout->i_line;
 
@@ -1787,10 +1792,13 @@ __ENDTRY
 			}
 		}
 		else {
-			_findout->is_found = _check_findout_what_accesses(_findout->prev_buf, _findout->str);
-			if (_findout->is_found) {
+			if (_check_findout_what_accesses(_findout->prev_buf, _findout->str)) {
+				for (size_t i = 0; i < _findout->prev_opsize; i++) {
+					*i_print += sprintf(&_findout->to_print[*i_print], "%02x ", _findout->prev_oprom[i]);
+				}
 				*i_print += sprintf(&_findout->to_print[*i_print], _findout->prev_buf);
 				*i_print += sprintf(&_findout->to_print[*i_print], " <--\n");
+				++_findout->i_line;
 			}
 		}
 
@@ -1800,6 +1808,8 @@ __ENDTRY
 		 */
 
 		strncpy(_findout->prev_buf, buf, sizeof(_findout->prev_buf));
+		strncpy((char*)_findout->prev_oprom, (char*)oprom, opsize);
+		_findout->prev_opsize = opsize;
 	}
 
 	static void _aob_scan
@@ -2293,7 +2303,7 @@ else
 				}
 
 				for (size_t i = 0; strlen(p_vm86_opts->find_out_what_accesses[i]); ++i) {
-					_findout_what_accesses(&findout_curr[i], p_vm86_opts->find_out_what_accesses[i], buffer);
+					_findout_what_accesses(&findout_curr[i], p_vm86_opts->find_out_what_accesses[i], oprom, opsize, buffer);
 				}
 			}
 
