@@ -1636,7 +1636,11 @@ __ENDTRY
 		return mem_addr;
 	}
 
-	static BOOL _scan_memory_for_str(UINT32 mem_addr, const char* str)
+	static BOOL _scan_memory_for_str
+		(
+		UINT32 mem_addr,	/* memory address */
+		const char* str		/* string to search */
+		)
 	{
 		for (size_t i = 0; i < strlen(str); ++i) {
 			if (read_byte(mem_addr + i) != str[i]) {
@@ -1721,7 +1725,11 @@ __ENDTRY
 		return ret;
 	}
 
-	static BOOL _check_findout_what_accesses(const char *buf, const char *str)
+	static BOOL _check_findout_what_accesses
+		(
+		const char *buf,	/* assembly instruction */
+		const char *str		/* string to search */
+		)
 	{
 		UINT32 mem_addr = _get_mem_address(buf);
 		return (mem_addr && _scan_memory_for_str(mem_addr, str));
